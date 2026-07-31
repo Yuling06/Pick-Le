@@ -14,6 +14,7 @@ import LoadingScreen from './pages/LoadingScreen';
 import Home from './pages/Home';
 import ClothingUpload from './pages/ClothingUpload';
 import RecommendationPage from './pages/RecommendationPage';
+import Admin from './pages/Admin';
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
               <Route path="/home" element={<Home />} />
               <Route path="/upload" element={<ClothingUpload />} />
               <Route path="/result/:requestId" element={<RecommendationPage />} />
+              <Route path="/admin" element={<Admin />} />
             </Route>
 
             <Route path="*" element={<PageNotFound />} />

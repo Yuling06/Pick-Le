@@ -3,22 +3,25 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/apiClient';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Sparkles, Upload, Image, ArrowLeft, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { useToast } from '@/components/ui/use-toast';
 
 export default function ClothingUpload() {
     const navigate = useNavigate();
+    const { toast } = useToast();
     const [submitting, setSubmitting] = useState(false);
-    const [clothingFile, setClothingFile] = useState(null);
-    const [clothingPreview, setClothingPreview] = useState(null);
+    const [error, setError] = useState(null);
+    const [frontFile, setFrontFile] = useState(null);
+    const [frontPreview, setFrontPreview] = useState(null);
+    const [backFile, setBackFile] = useState(null);
+    const [backPreview, setBackPreview] = useState(null);
     const [sizeChartFile, setSizeChartFile] = useState(null);
     const [sizeChartPreview, setSizeChartPreview] = useState(null);
-    const [manualSizes, setManualSizes] = useState('');
-    const [productInfo, setProductInfo] = useState('');
+
+    const allFilesSelected = frontFile && backFile && sizeChartFile;
 
     const handleFileSelect = (file, setFile, setPreview) => {
         if (!file) return;
@@ -28,30 +31,38 @@ export default function ClothingUpload() {
         reader.readAsDataURL(file);
     };
 
+    const dismissError = () => setError(null);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!clothingFile) return;
+        if (!allFilesSelected) return;
         setSubmitting(true);
+        setError(null);
 
-        const user = await apiClient.auth.me();
-        const { file_url: clothingUrl } = await apiClient.integrations.Core.UploadFile({ file: clothingFile });
+        try {
+            const user = await apiClient.auth.me();
 
-        let sizeChartUrl = '';
-        if (sizeChartFile) {
-            const { file_url } = await apiClient.integrations.Core.UploadFile({ file: sizeChartFile });
-            sizeChartUrl = file_url;
+            const [{ file_url: frontUrl }, { file_url: backUrl }, { file_url: sizeChartUrl }] = await Promise.all([
+                apiClient.integrations.Core.UploadFile({ file: frontFile }),
+                apiClient.integrations.Core.UploadFile({ file: backFile }),
+                apiClient.integrations.Core.UploadFile({ file: sizeChartFile }),
+            ]);
+
+            const request = await apiClient.entities.FitRequest.create({
+                user_email: user.email,
+                clothing_image_url: frontUrl,
+                back_image_url: backUrl,
+                size_chart_url: sizeChartUrl,
+                status: 'pending'
+            });
+
+            navigate(`/loading/${request.id}`);
+        } catch (err) {
+            const message = err.message || 'Something went wrong uploading your item. Please try again.';
+            setError(message);
+            toast({ title: 'Upload failed', description: message, variant: 'destructive' });
+            setSubmitting(false);
         }
-
-        const request = await apiClient.entities.FitRequest.create({
-            user_email: user.email,
-            clothing_image_url: clothingUrl,
-            size_chart_url: sizeChartUrl,
-            manual_sizes: manualSizes,
-            product_info: productInfo,
-            status: 'pending'
-        });
-
-        navigate(`/loading/${request.id}`);
     };
 
     return (
@@ -77,36 +88,73 @@ export default function ClothingUpload() {
                             <Upload className="w-7 h-7 text-primary" />
                         </div>
                         <h1 className="font-display text-3xl font-bold mb-2">Upload Clothing Item</h1>
-                        <p className="text-muted-foreground">Upload an image and we'll analyze the fit for your body.</p>
+                        <p className="text-muted-foreground">Upload photos of the item and its size chart, and we'll analyze the fit for your body.</p>
                     </div>
 
+                    {error && (
+                        <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                            <span className="flex-1">{error}</span>
+                            <button
+                                type="button"
+                                onClick={dismissError}
+                                aria-label="Dismiss"
+                                className="shrink-0 rounded-full p-1 hover:bg-destructive/20 transition-colors leading-none"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                    )}
+
                     <form onSubmit={handleSubmit} className="space-y-8">
-                        {/* Clothing Image */}
+                        {/* Front Photo */}
                         <div>
-                            <Label className="text-sm font-medium mb-2 block">Clothing Image *</Label>
+                            <Label className="text-sm font-medium mb-2 block">Front Photo *</Label>
                             <label
                                 className="flex flex-col items-center justify-center w-full h-52 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/40 transition-colors bg-secondary/20 overflow-hidden"
                             >
-                                {clothingPreview ? (
-                                    <img src={clothingPreview} alt="Preview" className="w-full h-full object-contain" />
+                                {frontPreview ? (
+                                    <img src={frontPreview} alt="Front preview" className="w-full h-full object-contain" />
                                 ) : (
                                     <div className="text-center">
                                         <Image className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
-                                        <p className="text-sm text-muted-foreground">Click to upload clothing image</p>
+                                        <p className="text-sm text-muted-foreground">Click to upload the front of the item</p>
                                     </div>
                                 )}
                                 <input
                                     type="file"
                                     accept="image/*"
                                     className="hidden"
-                                    onChange={(e) => handleFileSelect(e.target.files[0], setClothingFile, setClothingPreview)}
+                                    onChange={(e) => handleFileSelect(e.target.files[0], setFrontFile, setFrontPreview)}
+                                />
+                            </label>
+                        </div>
+
+                        {/* Back Photo */}
+                        <div>
+                            <Label className="text-sm font-medium mb-2 block">Back Photo *</Label>
+                            <label
+                                className="flex flex-col items-center justify-center w-full h-52 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/40 transition-colors bg-secondary/20 overflow-hidden"
+                            >
+                                {backPreview ? (
+                                    <img src={backPreview} alt="Back preview" className="w-full h-full object-contain" />
+                                ) : (
+                                    <div className="text-center">
+                                        <Image className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
+                                        <p className="text-sm text-muted-foreground">Click to upload the back of the item</p>
+                                    </div>
+                                )}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => handleFileSelect(e.target.files[0], setBackFile, setBackPreview)}
                                 />
                             </label>
                         </div>
 
                         {/* Size Chart */}
                         <div>
-                            <Label className="text-sm font-medium mb-2 block">Size Chart (optional)</Label>
+                            <Label className="text-sm font-medium mb-2 block">Size Chart *</Label>
                             <label
                                 className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/40 transition-colors bg-secondary/20 overflow-hidden"
                             >
@@ -127,34 +175,10 @@ export default function ClothingUpload() {
                             </label>
                         </div>
 
-                        {/* Manual Sizes */}
-                        <div>
-                            <Label htmlFor="manualSizes" className="text-sm font-medium mb-2 block">Manual Size Input (optional)</Label>
-                            <Input
-                                id="manualSizes"
-                                placeholder="e.g. S: 90cm chest, M: 96cm chest..."
-                                value={manualSizes}
-                                onChange={(e) => setManualSizes(e.target.value)}
-                                className="h-11"
-                            />
-                        </div>
-
-                        {/* Product Info */}
-                        <div>
-                            <Label htmlFor="productInfo" className="text-sm font-medium mb-2 block">Product Info (optional)</Label>
-                            <Textarea
-                                id="productInfo"
-                                placeholder="Brand name, product URL, or any additional details..."
-                                value={productInfo}
-                                onChange={(e) => setProductInfo(e.target.value)}
-                                className="min-h-[80px]"
-                            />
-                        </div>
-
                         <Button
                             type="submit"
                             size="lg"
-                            disabled={!clothingFile || submitting}
+                            disabled={!allFilesSelected || submitting}
                             className="w-full py-6 text-base rounded-xl shadow-lg shadow-primary/20"
                         >
                             {submitting ? (

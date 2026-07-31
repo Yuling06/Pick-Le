@@ -4,6 +4,7 @@ import { apiClient } from '@/api/apiClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ClipboardCheck } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 const questions = [
   { key: 'confidence_rating', text: 'This app increases my confidence when buying clothes online' },
@@ -34,6 +35,7 @@ function LikertScale({ value, onChange }) {
 }
 
 export default function FeedbackSurveyForm({ requestId, onComplete }) {
+  const { toast } = useToast();
   const [ratings, setRatings] = useState({
     confidence_rating: 0,
     sizing_match_rating: 0,
@@ -41,19 +43,30 @@ export default function FeedbackSurveyForm({ requestId, onComplete }) {
     would_use_rating: 0,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const allAnswered = Object.values(ratings).every(v => v > 0);
+
+  const dismissError = () => setError(null);
 
   const handleSubmit = async () => {
     if (!allAnswered) return;
     setSubmitting(true);
-    const user = await apiClient.auth.me();
-    await apiClient.entities.FeedbackSurvey.create({
-      request_id: requestId,
-      user_email: user.email,
-      ...ratings,
-    });
-    onComplete();
+    setError(null);
+    try {
+      const user = await apiClient.auth.me();
+      await apiClient.entities.FeedbackSurvey.create({
+        request_id: requestId,
+        user_email: user.email,
+        ...ratings,
+      });
+      onComplete();
+    } catch (err) {
+      const message = err.message || 'Something went wrong submitting your feedback. Please try again.';
+      setError(message);
+      toast({ title: 'Feedback not submitted', description: message, variant: 'destructive' });
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -63,6 +76,20 @@ export default function FeedbackSurveyForm({ requestId, onComplete }) {
         Feedback Survey
       </h2>
       <p className="text-sm text-muted-foreground mb-6">Please rate each statement (1 = Strongly Disagree, 5 = Strongly Agree)</p>
+
+      {error && (
+        <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <span className="flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={dismissError}
+            aria-label="Dismiss"
+            className="shrink-0 rounded-full p-1 hover:bg-destructive/20 transition-colors leading-none"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       <div className="space-y-6">
         {questions.map(q => (

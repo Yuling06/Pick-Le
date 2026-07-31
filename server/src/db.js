@@ -17,6 +17,18 @@ export const pool = new pg.Pool({
   // node-postgres to Supabase - Node's default CA bundle doesn't always validate
   // Supabase's certificate chain cleanly, and Supabase's own docs recommend this.
   ssl: isLocal ? false : { rejectUnauthorized: false },
+  // Keeps idle connections alive longer, reducing (but not eliminating) how
+  // often Supabase's pooler drops them.
+  keepAlive: true,
+});
+
+// REQUIRED: without this listener, any idle connection dropped by Supabase's
+// pooler (normal, expected behavior on their end) throws as an unhandled
+// 'error' event and crashes the entire Node process. This just logs it -
+// the pool automatically opens a fresh connection for the next query, so
+// no other code needs to change.
+pool.on('error', (err) => {
+  console.error('[db] Unexpected error on idle client:', err.message);
 });
 
 export async function initDb() {

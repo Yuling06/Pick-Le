@@ -1,0 +1,8 @@
+{
+    "polo": {
+        "blend_path": "polo/polo.blend",
+        "object_name": "Human.namuhekam_male_polo_shirt",
+        "reference_measurements": "polo/reference_measurements.json",
+        "uv_rotation_degrees": 90
+    }
+}

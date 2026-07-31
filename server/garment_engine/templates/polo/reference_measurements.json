@@ -1,0 +1,13 @@
+{
+    "garment_type": "shirt",
+    "mesh_name": "Human.namuhekam_male_polo_shirt",
+    "version": "1.0",
+    "measurements": {
+        "bust": 0.731,
+        "length": 0.563,
+        "shoulder_width": 0.381,
+        "sleeve_length": 0.142,
+        "neck_opening": 0.529,
+        "cuff": 0.345
+    }
+}

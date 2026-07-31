@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS fit_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_email TEXT NOT NULL,
   clothing_image_url TEXT,
+  back_image_url TEXT,
   size_chart_url TEXT,
   manual_sizes TEXT,
   product_info TEXT,
@@ -42,6 +43,9 @@ CREATE TABLE IF NOT EXISTS fit_requests (
   created_date TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_date TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Safe to re-run: adds the column for databases created before this field existed.
+ALTER TABLE fit_requests ADD COLUMN IF NOT EXISTS back_image_url TEXT;
 
 CREATE TABLE IF NOT EXISTS fit_results (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

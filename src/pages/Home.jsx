@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Upload, Ruler, User, ArrowRight, Clock, Pencil, LayoutDashboard } from 'lucide-react';
+import { Sparkles, Upload, User, ArrowRight, Clock, Pencil, LayoutDashboard } from 'lucide-react';
 import { motion } from 'framer-motion';
 import EditMeasurementsDialog from '@/components/EditMeasurementsDialog';
 import AvatarViewer from '@/components/AvatarViewer';
@@ -21,6 +21,8 @@ const styleLabels = {
 export default function Home() {
     const navigate = useNavigate();
     const { logout } = useAuth();
+
+    const [currentUser, setCurrentUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [gender, setGender] = useState(null);
     const [requests, setRequests] = useState([]);
@@ -33,8 +35,12 @@ export default function Home() {
 
     const loadData = async () => {
         const user = await apiClient.auth.me();
+
+        setCurrentUser(user);
         setGender(user.gender || null);
+
         const profiles = await apiClient.entities.UserProfile.filter({ user_email: user.email });
+
         if (profiles.length === 0) {
             navigate('/setup');
             return;
@@ -43,7 +49,9 @@ export default function Home() {
             navigate('/loading/profile');
             return;
         }
+
         setProfile(profiles[0]);
+
         const reqs = await apiClient.entities.FitRequest.filter({ user_email: user.email }, '-created_date');
         setRequests(reqs);
         setLoading(false);
@@ -67,6 +75,14 @@ export default function Home() {
                     <span className="font-display text-xl font-semibold tracking-tight">Pick-le</span>
                 </div>
                 <div className="flex items-center gap-2">
+                    {currentUser?.role === 'admin' && (
+                        <Link to="/admin">
+                            <Button variant="ghost" size="sm">
+                                <LayoutDashboard className="w-4 h-4 mr-1.5" />
+                                Admin
+                            </Button>
+                        </Link>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => { logout(); navigate('/'); }}>Sign Out</Button>
                 </div>
             </nav>
@@ -78,19 +94,16 @@ export default function Home() {
                         {/* Avatar */}
                         <Card className="w-full md:w-1/2 p-8 flex flex-col items-center text-center">
                             <div className="w-full max-w-md h-[500px] rounded-2xl bg-secondary/50 overflow-hidden">
-                                {profile.avatar_url && profile.avatar_type === 'glb' ? (
+                                {profile.avatar_url ? (
                                     <AvatarViewer url={resolveFileUrl(profile.avatar_url)} className="w-full h-full" />
-                                ) : profile.avatar_url ? (
-                                    <img src={resolveFileUrl(profile.avatar_url)} alt="Avatar" className="w-full h-full object-cover" />
                                 ) : (
-                                    <User className="w-16 h-16 text-muted-foreground/40" />
+                                    <div className="w-full h-full flex items-center justify-center">
+                                        <User className="w-16 h-16 text-muted-foreground/40" />
+                                    </div>
                                 )}
                             </div>
-                            {profile.avatar_url && profile.avatar_type === 'glb' && (
+                            {profile.avatar_url && (
                                 <p className="text-xs text-muted-foreground/70 mb-2">Drag to rotate · scroll to zoom</p>
-                            )}
-                            {profile.body_type_label && (
-                                <Badge variant="secondary" className="mb-2 text-sm">{profile.body_type_label}</Badge>
                             )}
                         </Card>
 
@@ -142,8 +155,15 @@ export default function Home() {
                                         key={req.id}
                                         className="p-4 cursor-pointer hover:shadow-md transition-shadow"
                                         onClick={() => {
-                                            if (req.status === 'completed') navigate(`/result/${req.id}`);
-                                            else navigate(`/loading/${req.id}`);
+                                            if (
+                                                req.status === 'completed' ||
+                                                req.status === 'rejected' ||
+                                                req.status === 'chart_unusable'
+                                            ) {
+                                                navigate(`/result/${req.id}`);
+                                            } else {
+                                                navigate(`/loading/${req.id}`);
+                                            }
                                         }}
                                     >
                                         <div className="aspect-[4/3] rounded-lg bg-secondary/50 overflow-hidden mb-3">
@@ -152,7 +172,9 @@ export default function Home() {
                                             )}
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <p className="text-sm text-muted-foreground truncate">{req.product_info || 'Clothing item'}</p>
+                                            <p className="text-sm text-muted-foreground truncate">
+                                                {req.created_date ? new Date(req.created_date).toLocaleDateString() : 'Clothing item'}
+                                            </p>
                                             <Badge variant={req.status === 'completed' ? 'default' : 'secondary'} className="text-xs">
                                                 {req.status === 'completed' ? 'Ready' : (
                                                     <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Pending</span>

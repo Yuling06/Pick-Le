@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/apiClient';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/components/ui/use-toast';
 
 const profileSteps = [
   'Analyzing body proportions...',
@@ -19,8 +20,10 @@ const fitSteps = [
 export default function LoadingScreen() {
   const { type } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
   const [failed, setFailed] = useState(false);
+  const consecutiveErrors = useRef(0);
   const steps = type === 'profile' ? profileSteps : fitSteps;
 
   useEffect(() => {
@@ -32,25 +35,50 @@ export default function LoadingScreen() {
 
   useEffect(() => {
     const pollStatus = async () => {
-      const user = await apiClient.auth.me();
+      try {
+        const user = await apiClient.auth.me();
 
-      if (type === 'profile') {
-        const profiles = await apiClient.entities.UserProfile.filter({ user_email: user.email });
-        if (profiles.length > 0 && profiles[0].profile_status === 'completed') {
-          navigate('/home');
+        if (type === 'profile') {
+          const profiles = await apiClient.entities.UserProfile.filter({ user_email: user.email });
+          if (profiles.length > 0 && profiles[0].profile_status === 'completed') {
+            navigate('/home');
+            return;
+          }
+          if (profiles.length > 0 && profiles[0].profile_status === 'failed') {
+            setFailed(true);
+            return;
+          }
+        } else {
+          // type is a request ID
+          const requests = await apiClient.entities.FitRequest.filter({ user_email: user.email });
+          const match = requests.find(r => r.id === type);
+          if (match && (match.status === 'completed' || match.status === 'rejected' || match.status === 'chart_unusable')) {
+            // RecommendationPage reads the FitResult row and renders the right
+            // state for each of these (recommendation, or a "couldn't be sized" message).
+            navigate(`/result/${type}`);
+            return;
+          }
+          if (match && match.status === 'failed') {
+            setFailed(true);
+            return;
+          }
+        }
+        consecutiveErrors.current = 0;
+      } catch (err) {
+        if (err.status === 401) {
+          // Session expired mid-poll - stop polling and send them to log back in.
+          apiClient.auth.redirectToLogin();
           return;
         }
-        if (profiles.length > 0 && profiles[0].profile_status === 'failed') {
-          setFailed(true);
-          return;
-        }
-      } else {
-        // type is a request ID
-        const requests = await apiClient.entities.FitRequest.filter({ user_email: user.email, status: 'completed' });
-        const match = requests.find(r => r.id === type);
-        if (match) {
-          navigate(`/result/${type}`);
-          return;
+        // Transient network/server errors: keep polling quietly, but surface a
+        // toast if it's failed several times in a row rather than forever.
+        consecutiveErrors.current += 1;
+        if (consecutiveErrors.current === 3) {
+          toast({
+            title: 'Having trouble checking status',
+            description: 'Still trying in the background - your request is still processing.',
+            variant: 'destructive',
+          });
         }
       }
     };
@@ -74,17 +102,34 @@ export default function LoadingScreen() {
       <div className="flex-1 flex items-center justify-center px-6">
         {failed ? (
           <div className="text-center max-w-md">
-            <p className="text-lg font-semibold mb-2">Avatar generation failed</p>
-            <p className="text-muted-foreground mb-6">
-              Something went wrong turning your scan into a 3D avatar. Your measurements were saved -
-              you can retake the scan and try again.
-            </p>
-            <button
-              onClick={() => navigate('/scan')}
-              className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
-            >
-              Retake Body Scan
-            </button>
+            {type === 'profile' ? (
+              <>
+                <p className="text-lg font-semibold mb-2">Avatar generation failed</p>
+                <p className="text-muted-foreground mb-6">
+                  Something went wrong turning your scan into a 3D avatar. Your measurements were saved -
+                  you can retake the scan and try again.
+                </p>
+                <button
+                  onClick={() => navigate('/scan')}
+                  className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
+                >
+                  Retake Body Scan
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-semibold mb-2">Fit analysis failed</p>
+                <p className="text-muted-foreground mb-6">
+                  Something went wrong analyzing this item. Please try uploading it again.
+                </p>
+                <button
+                  onClick={() => navigate('/upload')}
+                  className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
+                >
+                  Try Again
+                </button>
+              </>
+            )}
           </div>
         ) : (
         <div className="text-center max-w-md">

@@ -4,41 +4,56 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiClient, resolveFileUrl } from '@/api/apiClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Sparkles, ArrowLeft, Check, TrendingUp, Shirt, MessageSquare } from 'lucide-react';
 import { motion } from 'framer-motion';
 import FeedbackSurveyForm from '@/components/FeedbackSurveyForm';
+import AvatarViewer from '@/components/AvatarViewer';
 
 export default function RecommendationPage() {
     const { requestId } = useParams();
     const navigate = useNavigate();
     const [result, setResult] = useState(null);
-    const [request, setRequest] = useState(null);
     const [loading, setLoading] = useState(true);
     const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+    const [rejected, setRejected] = useState(null);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         loadResult();
     }, [requestId]);
 
     const loadResult = async () => {
-        const user = await apiClient.auth.me();
-        const results = await apiClient.entities.FitResult.filter({ request_id: requestId });
-        if (results.length === 0) {
-            navigate(`/loading/${requestId}`);
-            return;
+        setLoading(true);
+        setError(null);
+        try {
+            const user = await apiClient.auth.me();
+            const requests = await apiClient.entities.FitRequest.filter({ user_email: user.email });
+            const req = requests.find(r => r.id === requestId);
+
+            const results = await apiClient.entities.FitResult.filter({ request_id: requestId });
+            if (results.length === 0) {
+                navigate(`/loading/${requestId}`);
+                return;
+            }
+
+            const r = results[0];
+
+            if (req && (req.status === 'rejected' || req.status === 'chart_unusable')) {
+                setRejected(r.style_suggestion || 'This item could not be sized for you.');
+                setLoading(false);
+                return;
+            }
+
+            setResult(r);
+
+            const feedbacks = await apiClient.entities.FeedbackSurvey.filter({ request_id: requestId, user_email: user.email });
+            if (feedbacks.length > 0) setFeedbackSubmitted(true);
+
+            setLoading(false);
+        } catch (err) {
+            setError(err.message || 'Something went wrong loading your recommendation.');
+            setLoading(false);
         }
-        setResult(results[0]);
-
-        const requests = await apiClient.entities.FitRequest.filter({ user_email: user.email });
-        const req = requests.find(r => r.id === requestId);
-        setRequest(req);
-
-        // Check if feedback already submitted
-        const feedbacks = await apiClient.entities.FeedbackSurvey.filter({ request_id: requestId, user_email: user.email });
-        if (feedbacks.length > 0) setFeedbackSubmitted(true);
-
-        setLoading(false);
     };
 
     if (loading) {
@@ -48,6 +63,40 @@ export default function RecommendationPage() {
             </div>
         );
     }
+
+    if (error) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center px-6">
+                <Card className="p-8 max-w-md text-center">
+                    <p className="font-semibold mb-2">Couldn't load this recommendation</p>
+                    <p className="text-muted-foreground mb-6">{error}</p>
+                    <div className="flex items-center justify-center gap-3">
+                        <Button variant="outline" onClick={loadResult} className="rounded-xl">Try Again</Button>
+                        <Link to="/home">
+                            <Button className="rounded-xl">Back Home</Button>
+                        </Link>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
+    if (rejected) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center px-6">
+                <Card className="p-8 max-w-md text-center">
+                    <p className="font-semibold mb-2">This item couldn't be sized</p>
+                    <p className="text-muted-foreground mb-6">{rejected}</p>
+                    <Link to="/upload">
+                        <Button className="rounded-xl">Try Another Item</Button>
+                    </Link>
+                </Card>
+            </div>
+        );
+    }
+
+    // confidence_score comes back from the backend as a 0-1 fraction (e.g. 0.9)
+    const confidencePercent = Math.round((Number(result.confidence_score) || 0) * 100);
 
     const fitNotes = [
         { label: 'Chest Fit', value: result.chest_fit_note },
@@ -71,7 +120,6 @@ export default function RecommendationPage() {
 
             <div className="max-w-3xl mx-auto px-6 py-10">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="space-y-8">
-                    {/* Header */}
                     <div className="text-center">
                         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-100 text-green-700 text-sm font-medium mb-4">
                             <Check className="w-3.5 h-3.5" />
@@ -80,7 +128,6 @@ export default function RecommendationPage() {
                         <h1 className="font-display text-3xl font-bold">Your Fit Recommendation</h1>
                     </div>
 
-                    {/* Size Recommendation */}
                     <Card className="p-8 text-center">
                         <div className="flex items-center justify-center gap-3 mb-3">
                             <Shirt className="w-6 h-6 text-primary" />
@@ -89,14 +136,13 @@ export default function RecommendationPage() {
                         <div className="text-6xl font-display font-bold text-primary mb-3">{result.recommended_size}</div>
                         <div className="flex items-center justify-center gap-2">
                             <TrendingUp className="w-4 h-4 text-green-600" />
-                            <span className="text-sm font-medium text-green-600">{result.confidence_score}% Confidence</span>
+                            <span className="text-sm font-medium text-green-600">{confidencePercent}% Confidence</span>
                         </div>
-                        {/* Confidence bar */}
                         <div className="mt-4 max-w-xs mx-auto">
                             <div className="h-2 rounded-full bg-secondary overflow-hidden">
                                 <motion.div
                                     initial={{ width: 0 }}
-                                    animate={{ width: `${result.confidence_score}%` }}
+                                    animate={{ width: `${confidencePercent}%` }}
                                     transition={{ duration: 1, delay: 0.5 }}
                                     className="h-full rounded-full bg-green-500"
                                 />
@@ -104,7 +150,6 @@ export default function RecommendationPage() {
                         </div>
                     </Card>
 
-                    {/* Visualization */}
                     {result.visualization_image_url && (
                         <Card className="overflow-hidden">
                             <div className="p-4 border-b border-border">
@@ -113,17 +158,13 @@ export default function RecommendationPage() {
                                     Fit Visualization
                                 </h2>
                             </div>
-                            <div className="aspect-[3/4] bg-secondary/30">
-                                <img
-                                    src={resolveFileUrl(result.visualization_image_url)}
-                                    alt="Fit visualization"
-                                    className="w-full h-full object-contain"
-                                />
-                            </div>
+                            <AvatarViewer
+                                url={resolveFileUrl(result.visualization_image_url)}
+                                className="aspect-[3/4] bg-secondary/30"
+                            />
                         </Card>
                     )}
 
-                    {/* Fit Notes */}
                     {fitNotes.length > 0 && (
                         <Card className="p-6">
                             <h2 className="font-semibold mb-4 flex items-center gap-2">
@@ -144,7 +185,6 @@ export default function RecommendationPage() {
                         </Card>
                     )}
 
-                    {/* Style Suggestion */}
                     {result.style_suggestion && (
                         <Card className="p-6 bg-primary/5 border-primary/20">
                             <h2 className="font-semibold mb-2 flex items-center gap-2">
@@ -155,7 +195,6 @@ export default function RecommendationPage() {
                         </Card>
                     )}
 
-                    {/* Feedback Survey */}
                     {!feedbackSubmitted ? (
                         <FeedbackSurveyForm requestId={requestId} onComplete={() => setFeedbackSubmitted(true)} />
                     ) : (
