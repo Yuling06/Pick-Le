@@ -31,10 +31,10 @@ const CM_TO_METERS = 0.01;
 // ===========================================================================
 
 const targetEntry = {
-  bust: 92,           // "Chest"
-  shoulder_width: 45,
-  length: 64,         // "Front length"
-  sleeve_length: 17,
+  bust: 84,           // "Chest"
+  shoulder_width: 42,
+  length: 61,         // "Front length"
+  sleeve_length: 16
   // no "cuff" column on this chart - will be skipped, matching
   // garmentFitter.js's real behavior for missing fields
 };
@@ -48,7 +48,7 @@ const MEASUREMENT_VERTEX_GROUP_MAP = {
   cuff: 'VG_Cuff',
 };
 
-const AVATAR_GLB_PATH = './test_data/avatar-5e09acca-c02f-4c71-8852-4c36bccd8273.glb';
+const AVATAR_GLB_PATH = './test_data/sample_avatar.glb';
 const GARMENT_TYPE = 'polo';
 const OUTPUT_PATH = './test_garment_engine_only_output.glb';
 
